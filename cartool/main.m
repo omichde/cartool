@@ -8,49 +8,30 @@
 
 #import <Foundation/Foundation.h>
 
-
-@interface CUICommonAssetStorage : NSObject
-
--(NSArray *)allAssetKeys;
--(NSArray *)allRenditionNames;
-
--(id)initWithPath:(NSString *)p;
-
--(NSString *)versionString;
-
+@interface CUINamedLookup : NSObject
+- (NSString *)renditionName;
 @end
 
-@interface CUINamedImage : NSObject
-
+@interface CUINamedImage : CUINamedLookup
 -(CGImageRef)image;
-
-@end
-
-@interface CUIRenditionKey : NSObject
 @end
 
 @interface CUIThemeFacet : NSObject
-
 +(CUIThemeFacet *)themeWithContentsOfURL:(NSURL *)u error:(NSError **)e;
-
 @end
 
 @interface CUICatalog : NSObject
-
--(id)initWithName:(NSString *)n fromBundle:(NSBundle *)b;
--(id)allKeys;
--(CUINamedImage *)imageWithName:(NSString *)n scaleFactor:(CGFloat)s;
--(CUINamedImage *)imageWithName:(NSString *)n scaleFactor:(CGFloat)s deviceIdiom:(int)idiom;
-
+- (NSArray <NSString *>*)allImageNames;
+- (NSArray <CUINamedImage *>*)imagesWithName:(NSString *)n;
 @end
-
-#define kCoreThemeIdiomPhone 1
-#define kCoreThemeIdiomPad 2
 
 void CGImageWriteToFile(CGImageRef image, NSString *path)
 {
+	if (!image)
+		return;
+
     CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
-    CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
+	CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, ([path hasSuffix:@".png"] ? kUTTypePNG : kUTTypeJPEG), 1, NULL);
     CGImageDestinationAddImage(destination, image, nil);
 	
     if (!CGImageDestinationFinalize(destination)) {
@@ -74,29 +55,14 @@ void exportCarFileAtPath(NSString * carPath, NSString *outputDirectoryPath)
 	/* Override CUICatalog to point to a file rather than a bundle */
 	[catalog setValue:facet forKey:@"_storageRef"];
 	
-	/* CUICommonAssetStorage won't link */
-	CUICommonAssetStorage *storage = [[NSClassFromString(@"CUICommonAssetStorage") alloc] initWithPath:carPath];
-	
-	for (NSString *key in [storage allRenditionNames])
-	{
+	for (NSString *key in [catalog allImageNames]) {
 		printf("%s\n", [key UTF8String]);
+
+		NSArray *images = [catalog imagesWithName:key];
 		
-		CGImageRef iphone1X = [[catalog imageWithName:key scaleFactor:1.0 deviceIdiom:kCoreThemeIdiomPhone] image];
-		CGImageRef iphone2X = [[catalog imageWithName:key scaleFactor:2.0 deviceIdiom:kCoreThemeIdiomPhone] image];
-		CGImageRef ipad1X = [[catalog imageWithName:key scaleFactor:1.0 deviceIdiom:kCoreThemeIdiomPad] image];
-		CGImageRef ipad2X = [[catalog imageWithName:key scaleFactor:2.0 deviceIdiom:kCoreThemeIdiomPad] image];
-		
-		if (iphone1X)
-			CGImageWriteToFile(iphone1X, [outputDirectoryPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@~iphone.png", key]]);
-		
-		if (iphone2X)
-			CGImageWriteToFile(iphone2X, [outputDirectoryPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@~iphone@2x.png", key]]);
-		
-		if (ipad1X && ipad1X != iphone1X)
-			CGImageWriteToFile(ipad1X, [outputDirectoryPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@~ipad.png", key]]);
-		
-		if (ipad2X && ipad2X != iphone2X)
-			CGImageWriteToFile(ipad2X, [outputDirectoryPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@~ipad@2x.png", key]]);
+		for (CUINamedImage *image in images) {
+			CGImageWriteToFile ([image image], [outputDirectoryPath stringByAppendingPathComponent:image.renditionName]);
+		}
 	}
 }
 
